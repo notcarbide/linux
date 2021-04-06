@@ -1,0 +1,27 @@
+#!/bin/sh
+
+KERNEL=kernel7l
+CONFIG=bcm2711_defconfig
+JOBS=`grep processor /proc/cpuinfo|wc -l`
+
+make LLVM=1 ARCH=arm \
+  CROSS_COMPILE=arm-linux-gnueabihf- $CONFIG
+logsave build.log make -j$JOBS LLVM=1 ARCH=arm \
+  CROSS_COMPILE=arm-linux-gnueabihf- zImage modules dtbs
+if [ -e arch/arm/boot/zImage ]; then
+  mkdir -p out/boot/overlays
+  make LLVM=1 ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- \
+    INSTALL_MOD_PATH=out modules_install
+  rm -rf out/lib/modules/*/build
+  rm -rf out/lib/modules/*/source
+  cp arch/arm/boot/dts/*.dtb out/boot/
+  cp arch/arm/boot/dts/overlays/*.dtb* out/boot/overlays/
+  cp arch/arm/boot/dts/overlays/README out/boot/overlays/
+  cp arch/arm/boot/zImage out/boot/$KERNEL.img
+  cd out
+  zip -r pi4-kernel.zip .
+  cd ..
+else
+  echo "Build failed."
+fi
+
