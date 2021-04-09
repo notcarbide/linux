@@ -3,6 +3,7 @@
 KERNEL=kernel7l
 CONFIG=bcm2711_defconfig
 JOBS=`grep processor /proc/cpuinfo|wc -l`
+cdate=`date "+%Y-%m-%d"`
 
 make LLVM=1 ARCH=arm \
   CROSS_COMPILE=arm-linux-gnueabihf- $CONFIG
@@ -19,7 +20,7 @@ if [ -e arch/arm/boot/zImage ]; then
   cp arch/arm/boot/dts/overlays/README out/boot/overlays/
   cp arch/arm/boot/zImage out/boot/$KERNEL.img
   cd out
-  zip -r pi4-kernel.zip .
+  zip -r pi4-kernel-$cdate.zip .
   cd ..
 else
   echo "Build failed."
