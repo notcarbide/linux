@@ -767,6 +767,7 @@ KBUILD_CFLAGS += $(stackp-flags-y)
 ifdef CONFIG_CC_IS_CLANG
 ifdef CONFIG_POLLY_CLANG
 KBUILD_CFLAGS += -mllvm -polly \
+                 -mllvm -polly-run-dce \
                  -mllvm -polly-run-inliner \
                  -mllvm -polly-opt-fusion=max \
                  -mllvm -polly-ast-use-context \
