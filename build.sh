@@ -5,9 +5,9 @@ CONFIG=bcm2711_defconfig
 JOBS=`grep processor /proc/cpuinfo|wc -l`
 cdate=`date "+%Y-%m-%d"`
 
-make LLVM=1 ARCH=arm \
+make LLVM=1 LLVM_IAS=1 ARCH=arm \
   CROSS_COMPILE=arm-linux-gnueabihf- $CONFIG
-logsave build.log make -j$JOBS LLVM=1 ARCH=arm \
+logsave build.log make -j$JOBS LLVM=1 LLVM_IAS=1 ARCH=arm \
   CROSS_COMPILE=arm-linux-gnueabihf- zImage modules dtbs
 if [ -e arch/arm/boot/zImage ]; then
   mkdir -p out/boot/overlays
