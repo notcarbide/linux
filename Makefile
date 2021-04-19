@@ -766,14 +766,6 @@ stackp-flags-$(CONFIG_STACKPROTECTOR_STRONG)      := -fstack-protector-strong
 KBUILD_CFLAGS += $(stackp-flags-y)
 
 ifdef CONFIG_CC_IS_CLANG
-ifdef CONFIG_POLLY_CLANG
-KBUILD_CFLAGS += -mllvm -polly \
-                 -mllvm -polly-run-inliner \
-                 -mllvm -polly-opt-fusion=max \
-                 -mllvm -polly-ast-use-context \
-                 -mllvm -polly-vectorizer=stripmine \
-                 -mllvm -polly-invariant-load-hoisting
-endif
 KBUILD_CPPFLAGS += -Qunused-arguments
 KBUILD_CFLAGS += -Wno-format-invalid-specifier
 KBUILD_CFLAGS += -Wno-gnu
