@@ -81,8 +81,6 @@ struct vc4_dev {
 	struct vc4_hvs *hvs;
 	struct vc4_v3d *v3d;
 	struct vc4_dpi *dpi;
-	struct vc4_dsi *dsi0;
-	struct vc4_dsi *dsi1;
 	struct vc4_vec *vec;
 	struct vc4_txp *txp;
 	struct vc4_fkms *fkms;
@@ -447,6 +445,16 @@ enum vc4_encoder_type {
 
 struct vc4_encoder {
 	struct drm_encoder base;
+
+	/*
+	 * At boot time, we need to be able to retrieve the CRTC for a given
+	 * connector in order to run the disable hooks below to avoid the stuck
+	 * pixel issue. Unfortunately the drm_connector->encoder pointer is
+	 * NULL at that time so we can't move up the chain, so we'll store it
+	 * ourselves here.
+	 */
+	struct drm_crtc *crtc;
+
 	enum vc4_encoder_type type;
 	u32 clock_select;
 

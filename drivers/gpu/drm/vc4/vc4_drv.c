@@ -226,6 +226,41 @@ static int compare_dev(struct device *dev, void *data)
 	return dev == data;
 }
 
+static struct drm_crtc *vc4_drv_find_crtc(struct drm_device *drm,
+					  struct drm_encoder *encoder)
+{
+	struct drm_crtc *crtc;
+
+	if (WARN_ON(hweight32(encoder->possible_crtcs) != 1))
+		return NULL;
+
+	drm_for_each_crtc(crtc, drm) {
+		if (!drm_encoder_crtc_ok(encoder, crtc))
+			continue;
+
+		return crtc;
+	}
+
+	return NULL;
+}
+
+static void vc4_drv_set_encoder_data(struct drm_device *drm)
+{
+	struct drm_encoder *encoder;
+
+	drm_for_each_encoder(encoder, drm) {
+		struct vc4_encoder *vc4_encoder;
+		struct drm_crtc *crtc;
+
+		crtc = vc4_drv_find_crtc(drm, encoder);
+		if (WARN_ON(!crtc))
+			return;
+
+		vc4_encoder = to_vc4_encoder(encoder);
+		vc4_encoder->crtc = crtc;
+	}
+}
+
 static void vc4_match_add_drivers(struct device *dev,
 				  struct component_match **match,
 				  struct platform_driver *const *drivers,
@@ -308,6 +343,7 @@ static int vc4_drm_bind(struct device *dev)
 	ret = component_bind_all(dev, drm);
 	if (ret)
 		return ret;
+	vc4_drv_set_encoder_data(drm);
 
 	if (!vc4->firmware_kms) {
 		ret = vc4_plane_create_additional_planes(drm);
@@ -354,12 +390,21 @@ static const struct component_master_ops vc4_drm_ops = {
 	.unbind = vc4_drm_unbind,
 };
 
+/*
+ * This list determines the binding order of our components, and we have
+ * a few constraints:
+ *   - The TXP driver needs to be bound before the PixelValves (CRTC)
+ *     but after the HVS to set the possible_crtc field properly
+ *   - The HDMI driver needs to be bound after the HVS so that we can
+ *     lookup the HVS maximum core clock rate and figure out if we
+ *     support 4kp60 or not.
+ */
 static struct platform_driver *const component_drivers[] = {
+	&vc4_hvs_driver,
 	&vc4_hdmi_driver,
 	&vc4_vec_driver,
 	&vc4_dpi_driver,
 	&vc4_dsi_driver,
-	&vc4_hvs_driver,
 	&vc4_txp_driver,
 	&vc4_crtc_driver,
 	&vc4_firmware_kms_driver,

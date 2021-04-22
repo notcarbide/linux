@@ -272,6 +272,19 @@ static u32 vc4_crtc_get_fifo_full_level_bits(struct vc4_crtc *vc4_crtc,
 				   PV_CONTROL_FIFO_LEVEL);
 }
 
+static struct drm_encoder *vc4_get_connector_encoder(struct drm_connector *connector)
+{
+	struct drm_encoder *encoder;
+
+	if (drm_WARN_ON(connector->dev, hweight32(connector->possible_encoders) != 1))
+		return NULL;
+
+	drm_connector_for_each_possible_encoder(connector, encoder)
+		return encoder;
+
+	return NULL;
+}
+
 /*
  * Returns the encoder attached to the CRTC.
  *
@@ -286,9 +299,17 @@ static struct drm_encoder *vc4_get_crtc_encoder(struct drm_crtc *crtc)
 
 	drm_connector_list_iter_begin(crtc->dev, &conn_iter);
 	drm_for_each_connector_iter(connector, &conn_iter) {
-		if (connector->state->crtc == crtc) {
+		struct drm_encoder *encoder;
+		struct vc4_encoder *vc4_encoder;
+
+		encoder = vc4_get_connector_encoder(connector);
+		if (!encoder)
+			continue;
+
+		vc4_encoder = to_vc4_encoder(encoder);
+		if (vc4_encoder->crtc == crtc) {
 			drm_connector_list_iter_end(&conn_iter);
-			return connector->encoder;
+			return encoder;
 		}
 	}
 	drm_connector_list_iter_end(&conn_iter);
@@ -319,7 +340,8 @@ static void vc4_crtc_config_pv(struct drm_crtc *crtc)
 	u32 pixel_rep = (mode->flags & DRM_MODE_FLAG_DBLCLK) ? 2 : 1;
 	bool is_dsi = (vc4_encoder->type == VC4_ENCODER_TYPE_DSI0 ||
 		       vc4_encoder->type == VC4_ENCODER_TYPE_DSI1);
-	u32 format = is_dsi ? PV_CONTROL_FORMAT_DSIV_24 : PV_CONTROL_FORMAT_24;
+	bool is_dsi1 = vc4_encoder->type == VC4_ENCODER_TYPE_DSI1;
+	u32 format = is_dsi1 ? PV_CONTROL_FORMAT_DSIV_24 : PV_CONTROL_FORMAT_24;
 	u8 ppc = pv_data->pixels_per_clock;
 	bool debug_dump_regs = false;
 
@@ -1008,7 +1030,7 @@ static const struct vc4_pv_data bcm2711_pv3_data = {
 	.fifo_depth = 64,
 	.pixels_per_clock = 1,
 	.encoder_types = {
-		[0] = VC4_ENCODER_TYPE_VEC,
+		[PV_CONTROL_CLK_SELECT_VEC] = VC4_ENCODER_TYPE_VEC,
 	},
 };
 
@@ -1048,6 +1070,9 @@ static void vc4_set_crtc_possible_masks(struct drm_device *drm,
 	drm_for_each_encoder(encoder, drm) {
 		struct vc4_encoder *vc4_encoder;
 		int i;
+
+		if (encoder->encoder_type == DRM_MODE_ENCODER_VIRTUAL)
+			continue;
 
 		vc4_encoder = to_vc4_encoder(encoder);
 		for (i = 0; i < ARRAY_SIZE(pv_data->encoder_types); i++) {
