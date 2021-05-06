@@ -13,6 +13,7 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
 #include <linux/kernel.h>
+#include <linux/kthread.h>
 #include <linux/list.h>
 #include <linux/log2.h>
 #include <linux/module.h>
@@ -189,6 +190,7 @@
 
 /* Forward declarations */
 struct brcm_pcie;
+static const struct dev_pm_ops brcm_pcie_pm_ops;
 static inline void brcm_pcie_bridge_sw_init_set_7278(struct brcm_pcie *pcie, u32 val);
 static inline void brcm_pcie_bridge_sw_init_set_generic(struct brcm_pcie *pcie, u32 val);
 static inline void brcm_pcie_perst_set_7278(struct brcm_pcie *pcie, u32 val);
@@ -724,6 +726,8 @@ static void __iomem *brcm_pcie_map_conf(struct pci_bus *bus, unsigned int devfn,
 	return base + PCIE_EXT_CFG_DATA + where;
 }
 
+MODULE_DEVICE_TABLE(of, brcm_pcie_match);
+
 static struct pci_ops brcm_pcie_ops = {
 	.map_bus = brcm_pcie_map_conf,
 	.read = pci_generic_config_read,
@@ -1231,26 +1235,29 @@ static const struct of_device_id brcm_pcie_match[] = {
 	{},
 };
 
-static int brcm_pcie_probe(struct platform_device *pdev)
+static int __brcm_pcie_probe(void *p)
 {
+	struct platform_device *pdev = p;
+	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node, *msi_np;
 	struct pci_host_bridge *bridge;
 	const struct pcie_cfg_data *data;
 	struct brcm_pcie *pcie;
+	struct platform_driver *drv = to_platform_driver(dev->driver);
 	int ret;
 
-	bridge = devm_pci_alloc_host_bridge(&pdev->dev, sizeof(*pcie));
+	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
 	if (!bridge)
 		return -ENOMEM;
 
-	data = of_device_get_match_data(&pdev->dev);
+	data = of_device_get_match_data(dev);
 	if (!data) {
 		pr_err("failed to look up compatible string\n");
 		return -EINVAL;
 	}
 
 	pcie = pci_host_bridge_priv(bridge);
-	pcie->dev = &pdev->dev;
+	pcie->dev = dev;
 	pcie->np = np;
 	pcie->reg_offsets = data->offsets;
 	pcie->type = data->type;
@@ -1261,7 +1268,7 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	if (IS_ERR(pcie->base))
 		return PTR_ERR(pcie->base);
 
-	pcie->clk = devm_clk_get_optional(&pdev->dev, "sw_pcie");
+	pcie->clk = devm_clk_get_optional(dev, "sw_pcie");
 	if (IS_ERR(pcie->clk))
 		return PTR_ERR(pcie->clk);
 
@@ -1273,10 +1280,10 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 
 	ret = clk_prepare_enable(pcie->clk);
 	if (ret) {
-		dev_err(&pdev->dev, "could not enable clock\n");
+		dev_err(dev, "could not enable clock\n");
 		return ret;
 	}
-	pcie->rescal = devm_reset_control_get_optional_shared(&pdev->dev, "rescal");
+	pcie->rescal = devm_reset_control_get_optional_shared(dev, "rescal");
 	if (IS_ERR(pcie->rescal)) {
 		clk_disable_unprepare(pcie->clk);
 		return PTR_ERR(pcie->rescal);
@@ -1284,7 +1291,7 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 
 	ret = reset_control_deassert(pcie->rescal);
 	if (ret)
-		dev_err(&pdev->dev, "failed to deassert 'rescal'\n");
+		dev_err(dev, "failed to deassert 'rescal'\n");
 
 	ret = brcm_phy_start(pcie);
 	if (ret) {
@@ -1312,6 +1319,7 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	bridge->sysdata = pcie;
 
 	platform_set_drvdata(pdev, pcie);
+	drv->driver.pm = &brcm_pcie_pm_ops;
 
 	return pci_host_probe(bridge);
 fail:
@@ -1319,7 +1327,17 @@ fail:
 	return ret;
 }
 
-MODULE_DEVICE_TABLE(of, brcm_pcie_match);
+static int brcm_pcie_probe(struct platform_device *pdev)
+{
+	struct task_struct *tsk;
+
+	tsk = kthread_run(__brcm_pcie_probe, pdev, "brcm-pcie");
+	if (IS_ERR(tsk)) {
+		dev_err(&pdev->dev, "start brcm-pcie thread failed\n");
+		return PTR_ERR(tsk);
+	}
+	return 0;
+}
 
 static const struct dev_pm_ops brcm_pcie_pm_ops = {
 	.suspend = brcm_pcie_suspend,
@@ -1332,7 +1350,6 @@ static struct platform_driver brcm_pcie_driver = {
 	.driver = {
 		.name = "brcm-pcie",
 		.of_match_table = brcm_pcie_match,
-		.pm = &brcm_pcie_pm_ops,
 	},
 };
 module_platform_driver(brcm_pcie_driver);
