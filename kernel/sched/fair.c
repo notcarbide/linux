@@ -5515,6 +5515,12 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int idle_h_nr_running = task_has_idle_policy(p);
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 
+#ifdef CONFIG_SMP
+	cpufreq_task_boost(rq->cpu, task_util_est(p));
+#else
+	cpufreq_task_boost(0, 0);
+#endif
+
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
 	 * the cfs_rq utilization to select a frequency.

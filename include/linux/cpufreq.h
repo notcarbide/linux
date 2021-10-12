@@ -1045,6 +1045,8 @@ static inline void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
 			struct cpufreq_governor *old_gov) { }
 #endif
 
+void cpufreq_task_boost(int cpu, unsigned long util);
+
 extern void arch_freq_prepare_all(void);
 extern unsigned int arch_freq_get_on_cpu(int cpu);
 

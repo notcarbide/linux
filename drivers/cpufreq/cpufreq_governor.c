@@ -229,6 +229,64 @@ unsigned int dbs_update(struct cpufreq_policy *policy)
 }
 EXPORT_SYMBOL_GPL(dbs_update);
 
+static unsigned int get_freq_for_util(struct cpufreq_policy *policy,
+				      unsigned long util)
+{
+	unsigned long max_cap;
+	unsigned int est_freq = 0;
+
+	max_cap = arch_scale_cpu_capacity(policy->cpu);
+
+#ifdef CONFIG_SMP
+	est_freq = arch_scale_freq_invariant() ?
+			      policy->cpuinfo.max_freq : policy->cur;
+#endif
+	est_freq = map_util_freq(util, est_freq, max_cap);
+
+	return cpufreq_driver_resolve_freq(policy, est_freq);
+}
+
+#ifdef CONFIG_SMP
+extern unsigned long capacity_curr_of(int cpu);
+#else
+static unsigned long capacity_curr_of(int cpu)
+{
+	return 0;
+}
+#endif
+
+void cpufreq_task_boost(int cpu, unsigned long util)
+{
+	struct cpufreq_policy *policy = cpufreq_cpu_get_raw(cpu);
+	struct policy_dbs_info *policy_dbs = policy->governor_data;
+	struct dbs_data *dbs_data = policy_dbs->dbs_data;
+	unsigned long cap;
+
+	if (!policy || (policy->cur == policy->max))
+		return;
+
+#ifndef CONFIG_SMP
+	if (util == 0)
+		return;
+#endif
+
+	util = map_util_perf(util);
+	cap = capacity_curr_of(cpu);
+
+	if (util > cap) {
+		u64 now = ktime_to_us(ktime_get());
+		u64 prev_boost_endtime = dbs_data->task_boost_endtime;
+		unsigned int boost_freq;
+
+		dbs_data->task_boost_endtime = now + dbs_data->sampling_rate;
+		boost_freq = get_freq_for_util(policy, util);
+
+		if ((now >= prev_boost_endtime) &&
+				      (boost_freq > dbs_data->task_boost_freq))
+			dbs_data->task_boost_freq = boost_freq;
+	}
+}
+
 static void dbs_work_handler(struct work_struct *work)
 {
 	struct policy_dbs_info *policy_dbs;

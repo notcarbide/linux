@@ -150,10 +150,16 @@ static void od_update(struct cpufreq_policy *policy)
 	} else {
 		/* Calculate the next frequency proportional to load */
 		unsigned int freq_next, min_f, max_f;
+		u64 now;
 
 		min_f = policy->cpuinfo.min_freq;
 		max_f = policy->cpuinfo.max_freq;
 		freq_next = min_f + load * (max_f - min_f) / 100;
+
+		get_cpu_idle_time(policy->cpu, &now, dbs_data->io_is_busy);
+		if ((now < dbs_data->task_boost_endtime) &&
+				   (freq_next < dbs_data->task_boost_freq))
+			freq_next = dbs_data->task_boost_freq;
 
 		/* No longer fully busy, reset rate_mult */
 		policy_dbs->rate_mult = 1;
