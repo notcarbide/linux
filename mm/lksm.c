@@ -548,12 +548,12 @@ static int region_share[LKSM_REGION_UNKNOWN + 1];
 
 struct lksm_region {
 	enum lksm_region_type type;
-	int len;
 	int ino;
 	int merge_cnt;
 	int filter_cnt;
 	int scan_round;
 	int conflict;
+	unsigned long len;
 	atomic_t refcount;
 	struct hlist_node hnode;
 	struct lksm_region *next;
@@ -580,7 +580,7 @@ static unsigned int lksm_nr_regions;
 /* the upper limit for region lookup */
 #define LKSM_REGION_ITER_MAX 8
 
-#define lksm_region_size(start, end) ((int)(end - start) >> PAGE_SHIFT)
+#define lksm_region_size(start, end) ((end - start) >> PAGE_SHIFT)
 #define lksm_bitmap_size(size) ((size >> 6) + ((size % BITS_PER_LONG) ? 1 : 0))
 
 /* all processes share one lksm_region for their heaps */
@@ -2909,9 +2909,9 @@ static void lksm_insert_mm_slot_ordered(struct mm_slot *slot)
  */
 
 static inline void __lksm_copy_filter
-(unsigned long *orig, unsigned long *newer, int size)
+(unsigned long *orig, unsigned long *newer, unsigned long size)
 {
-	while (--size >= 0)
+	while (size-- > 0)
 		*(newer++) = *(orig++);
 }
 
@@ -2958,8 +2958,8 @@ static struct vm_area_struct *lksm_find_next_vma
 		else if (region->type != LKSM_REGION_HEAP
 					&& region->type != LKSM_REGION_CONFLICT
 					&& region->type != LKSM_REGION_UNKNOWN) {
-			int size = lksm_region_size(vma->vm_start, vma->vm_end);
-			int len = (size > BITS_PER_LONG) ? lksm_bitmap_size(size)
+			unsigned long size = lksm_region_size(vma->vm_start, vma->vm_end);
+			unsigned long len = (size > BITS_PER_LONG) ? lksm_bitmap_size(size)
 					: SINGLE_FILTER_LEN;
 
 			if (len > SINGLE_FILTER_LEN && unlikely(region->len != len)) {
@@ -2976,7 +2976,7 @@ static struct vm_area_struct *lksm_find_next_vma
 				}
 				if (region->len < len) {
 					unsigned long *filter;
-					ksm_debug("size of region(%p) is changed: %d -> %d (size: %d)",
+					ksm_debug("size of region(%p) is changed: %lu -> %lu (size: %lu)",
 							region, region->len, len, size);
 					filter = kcalloc(len, sizeof(long), GFP_KERNEL);
 					if (!filter) {
@@ -4791,7 +4791,7 @@ static const struct attribute_group ksm_attr_group = {
 
 #ifdef CONFIG_LKSM_FILTER
 static inline void init_lksm_region
-(struct lksm_region *region, unsigned long ino, int type, int len)
+(struct lksm_region *region, unsigned long ino, int type, unsigned long len)
 {
 	region->ino = ino;
 	region->type = type;
@@ -4803,12 +4803,12 @@ static void lksm_insert_region
 (struct lksm_region **region, unsigned long ino,
 struct vm_area_struct *vma, int type)
 {
-	int size, len, need_hash_add = 0;
+	int need_hash_add = 0;
+	unsigned long len, size;
 	struct lksm_region *next = NULL;
 	unsigned long flags;
 
 	size = lksm_region_size(vma->vm_start, vma->vm_end);
-	BUG_ON(size < 0);
 	len = (size > BITS_PER_LONG) ? lksm_bitmap_size(size) : SINGLE_FILTER_LEN;
 
 	if (!(*region)) {
