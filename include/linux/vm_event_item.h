@@ -126,7 +126,7 @@ enum vm_event_item { PGPGIN, PGPGOUT, PSWPIN, PSWPOUT,
 #ifdef CONFIG_SWAP
 		SWAP_RA,
 		SWAP_RA_HIT,
-#ifdef CONFIG_KSM
+#if defined(CONFIG_KSM) || defined(CONFIG_LKSM)
 		KSM_SWPIN_COPY,
 #endif
 #endif

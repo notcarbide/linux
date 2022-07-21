@@ -1376,7 +1376,7 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_SWAP
 	"swap_ra",
 	"swap_ra_hit",
-#ifdef CONFIG_KSM
+#if defined(CONFIG_KSM) || defined(CONFIG_LKSM)
 	"ksm_swpin_copy",
 #endif
 #endif
